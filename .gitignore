@@ -1,0 +1,19 @@
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+
+# Node
+node_modules/
+node-compile-cache/
+
+# React build output
+app-new/frontend/build/
+
+# Mac
+.DS_Store
+
+# Misc
+*.log
