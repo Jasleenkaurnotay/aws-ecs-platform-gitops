@@ -22,3 +22,18 @@ module "database" {
     db_password = var.db_password
     db_instance_size = var.db_instance_size
 }
+
+module "ecs" {
+    source = "./modules/ecs"
+    project_name = var.project_name
+    environment = var.environment
+    ecs_cluster_name = var.ecs_cluster_name
+    namespace_name = var.namespace_name
+    ecs_task_def = var.ecs_task_def
+    ecs_service = var.ecs_service
+    ecs_task_iam_role_name = var.ecs_task_iam_role_name
+    vpc_id = module.network.vpc_id
+    alb = var.alb
+    alb_listener = var.alb_listener
+    target_group = var.target_group
+}

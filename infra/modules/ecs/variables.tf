@@ -55,6 +55,7 @@ variable "ecs_service" {
     type = list(object({
         name = string
         num_tasks = number
+        need_alb = bool
         svc_conn_conf = object({
           enable = bool
           service = object({

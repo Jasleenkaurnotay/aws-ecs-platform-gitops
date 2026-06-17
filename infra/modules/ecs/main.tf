@@ -5,7 +5,7 @@ resource "aws_lb" "alb" {
     load_balancer_type = "application"
     security_groups = [var.alb.sg]
     tags = {
-        Name = "${var.project_name}-${var.environment}-var.alb.name"
+        Name = "${var.project_name}-${var.environment}-${var.alb.name}"
         ProjectName = var.project_name
         ManagedBy = "Terraform"
     }
@@ -69,7 +69,7 @@ resource "aws_iam_role" "ecs_execution_role" {
 }
 
 # 3. Attach the standard AWS Managed Policy (gives basic ECS execution rights) to the IAM role created above
-resource "aws_iam_role_policy_attachemnt" "ecs_execution_managed" {
+resource "aws_iam_role_policy_attachment" "ecs_execution_managed" {
     role = aws_iam_role.ecs_execution_role.name
     policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
@@ -93,7 +93,7 @@ resource "aws_iam_role_policy" "ecs_execution_logs_policy" {
 
 # Create cloudwatch log groups for FE and BE tasks
 resource "aws_cloudwatch_log_group" "ecs_logs" {
-    count = lenth(var.ecs_service)
+    count = length(var.ecs_service)
 
     # Use the 'name' key from the current index object in the list
     name = "/ecs/${var.ecs_service[count.index].name}"
@@ -122,13 +122,13 @@ resource "aws_ecs_cluster" "ecs_cluster" {
 
 # Create ECS task definition for both FE and BE
 
-resource "aws_ecs_task_definition" "service" {
+resource "aws_ecs_task_definition" "ecs_task_def" {
     count = length(var.ecs_task_def)
     family = var.ecs_task_def[count.index].task_def_family
     cpu = var.ecs_task_def[count.index].cpu
     memory = var.ecs_task_def[count.index].memory
     network_mode = "awsvpc"
-    requires_compatibilities = [var.ecs_task_def[count.index].launch_type]
+    requires_compatibilities = ["FARGATE"]
     execution_role_arn = aws_iam_role.ecs_execution_role.arn
 
     runtime_platform {
@@ -136,7 +136,7 @@ resource "aws_ecs_task_definition" "service" {
       cpu_architecture = "X86_64"
     }
 
-    container_definitions = jsondecode([
+    container_definitions = jsonencode([
         {
             name      = var.ecs_task_def[count.index].cont_def.name
             image     = var.ecs_task_def[count.index].cont_def.image
@@ -154,6 +154,69 @@ resource "aws_ecs_task_definition" "service" {
                 }
             ]
 
+            environment = var.ecs_task_def[count.index].cont_def.environment
+
+            secrets = var.ecs_task_def[count.index].cont_def.secret
+
+            logConfiguration = {
+                logDriver = "awslogs"
+                options = {
+                    "awslogs-group"         = var.ecs_task_def[count.index].cont_def.log_group
+                    "awslogs-region"        = "us-east-1"
+                    "awslogs-stream-prefix" = "ecs"
+                }
+            }
         }
     ])
+}
+
+# Create ECS service for FE and BE
+resource "aws_ecs_service" "ecs_svcs" {
+    count = length(var.ecs_service)
+    name = var.ecs_service[count.index].name
+    cluster = aws_ecs_cluster.ecs_cluster.id
+    task_definition = aws_ecs_task_definition.ecs_task_def[count.index].arn
+    desired_count = var.ecs_service[count.index].num_tasks
+    depends_on = [ aws_iam_role.ecs_execution_role ]
+    launch_type = "FARGATE"
+
+    dynamic "load_balancer" {
+        for_each = var.ecs_service[count.index].need_alb ? [1] : []
+        content {
+            target_group_arn = aws_lb_target_group.alb_tg.arn
+            container_name = var.ecs_service[count.index].name
+            container_port = var.ecs_task_def[count.index].cont_def.cont_port
+        }
+    }
+
+    service_connect_configuration {
+      enabled = true
+      namespace = aws_service_discovery_http_namespace.svc_conn_namespace.arn
+
+      log_configuration {
+        log_driver = "awslogs"
+        options = {
+            "awslogs-group" = "/ecs/${var.project_name}/service-connect"
+            "awslogs-region" = "us-east-1"
+            "awslogs-stream-prefix" = "service-connect"
+        }
+      }
+
+      service {
+        port_name = var.ecs_service[count.index].svc_conn_conf.service.port_alias
+        discovery_name = var.ecs_service[count.index].svc_conn_conf.service.disc_name
+
+        client_alias {
+          dns_name = var.ecs_service[count.index].svc_conn_conf.service.alias.dns
+          port = var.ecs_service[count.index].svc_conn_conf.service.alias.port
+        }
+      }
+    }
+
+    network_configuration {
+      assign_public_ip = false
+      security_groups = var.ecs_service[count.index].network_conf.sg
+      subnets = var.ecs_service[count.index].network_conf.subnet
+    }
+
 }
