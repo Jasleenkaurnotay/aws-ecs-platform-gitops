@@ -1,11 +1,13 @@
 variable "aws_region" {
     type = string
     description = "Region to be used for AWS deployments"
+    default = "us-east-1"
 }
 
 variable "aws_profile" {
     type = string
     description = "AWS profile present on machine for performing deployments in AWS"
+    default = "terraform"
 }
 
 variable "project_name" {
@@ -126,6 +128,7 @@ variable "ecs_task_def" {
 variable "ecs_service" {
     type = list(object({
         name = string
+        is_frontend = bool
         num_tasks = number
         need_alb = bool
         svc_conn_conf = object({
@@ -145,7 +148,7 @@ variable "ecs_service" {
         })
         network_conf = object({
           pub_ip = bool
-          sg = string
+          sg = list(string)
           subnet = list(string) 
         })
     }))
@@ -157,18 +160,12 @@ variable "ecs_task_iam_role_name" {
     description = "Enter the name of the shared IAM task execution role for all ECS services"
 }
 
-# VPC ID
-variable "vpc_id" {
-  type       = string
-  description = "VPC ID"
-}
-
 # Application Load Balancer
 variable "alb" {
     type = object({
         name = string
-        subnets = list(string)
-        sg = string
+        subnets = optional(list(string), [])
+        sg = optional(list(string), [])
     })
     description = "Enter the name of the application load balancer"
 }

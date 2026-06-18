@@ -30,10 +30,14 @@ module "ecs" {
     ecs_cluster_name = var.ecs_cluster_name
     namespace_name = var.namespace_name
     ecs_task_def = var.ecs_task_def
-    ecs_service = var.ecs_service
+    ecs_service = local.ecs_services_with_network
     ecs_task_iam_role_name = var.ecs_task_iam_role_name
     vpc_id = module.network.vpc_id
-    alb = var.alb
+    alb = {
+        name = var.alb.name
+        subnets = module.network.public_subnet_ids
+        sg = [module.network.alb_sg_id]
+    }
     alb_listener = var.alb_listener
     target_group = var.target_group
 }

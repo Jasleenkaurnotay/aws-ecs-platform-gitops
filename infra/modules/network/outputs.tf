@@ -20,7 +20,7 @@ output "private_subnet_ids" {
 
 output "pvt_subnet_az" {
   description = "Avaolability zones of the VPC subnets"
-  value = aws_subnet.pvt_subnet[*].availability_zone
+  value = [for s in aws_subnet.pvt_subnet : s.availability_zone]
 }
 
 output "nat_gateway_ids" {

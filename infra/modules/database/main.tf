@@ -52,13 +52,15 @@ resource "aws_db_instance" "rds_db" {
     instance_class = var.db_instance_size
     allocated_storage = 20
     db_name = var.db_name
+    username = var.db_username
     password = var.db_password
     publicly_accessible = false
     db_subnet_group_name = aws_db_subnet_group.rds_db_sub_group.name
     engine = "postgres"
-    engine_version = "14.22"
+    engine_version = "14.13"
     availability_zone = var.pvt_subnet_az[0]    # aws_db_instance for RDS takes availability_zone as a single string, not a list
     vpc_security_group_ids = [var.db_sg_id]
+    skip_final_snapshot  = true
     apply_immediately = true
     tags = {
         Name = "${var.project_name}-${var.environment}-rds-db"

@@ -54,6 +54,7 @@ variable "ecs_task_def" {
 variable "ecs_service" {
     type = list(object({
         name = string
+        is_frontend = bool
         num_tasks = number
         need_alb = bool
         svc_conn_conf = object({
@@ -73,7 +74,7 @@ variable "ecs_service" {
         })
         network_conf = object({
           pub_ip = bool
-          sg = string
+          sg = list(string)
           subnet = list(string) 
         })
     }))
@@ -95,8 +96,8 @@ variable "vpc_id" {
 variable "alb" {
     type = object({
         name = string
-        subnets = list(string)
-        sg = string
+        subnets = optional(list(string), [])
+        sg = optional(list(string), [])
     })
     description = "Enter the name of the application load balancer"
 }
