@@ -4,11 +4,11 @@ variable "aws_region" {
     default = "us-east-1"
 }
 
-variable "aws_profile" {
-    type = string
-    description = "AWS profile present on machine for performing deployments in AWS"
-    default = "terraform"
-}
+#variable "aws_profile" {
+#    type = string
+#    description = "AWS profile present on machine for performing deployments in AWS"
+#    default = "terraform"
+#}
 
 variable "project_name" {
   type = string
