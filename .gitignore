@@ -3,7 +3,7 @@
 *.tfstate.backup
 .terraform/
 .terraform.lock.hcl
-*.tfvars
+
 
 # Node
 node_modules/

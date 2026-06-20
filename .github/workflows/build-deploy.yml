@@ -1,0 +1,163 @@
+# Step 1: should deploy when app folder is updated
+# Step 2: needs docker build (needs docker on runner)
+# Step 3: push the image to ECR (need login and docker push command)
+# Step 4: run one time migration task via ECS command, manully configured task
+# Step 5: Force service deployment
+
+---
+name: build-deploy-workflow
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'  # only if something inside the app/ folder changed
+
+# Assign permissions for Github workflow to perform actions in AWS account
+permissions:
+  id-token: write # Required for requesting the AWS OIDC JWT token
+  contents: read  # Required for actions/checkout
+
+jobs:
+  build-docker-images:      
+    runs-on: ubuntu-latest  # Comes with docker pre-installed
+    strategy:
+      matrix:
+        services:
+          - name: backend
+            path: ./app/backend
+            ecr_repo: devopsquiz/backend
+          
+          - name: frontend
+            path: ./app/frontend
+            ecr_repo: devopsquiz/frontend
+    steps:
+      # Step 1: Clone the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+       # Step 2: Authenticate to cloud provider via OIDC
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume:               # Add AWS IAM role ARN 
+          role-session-name: Github_to_AWS_via_FederatedOIDC
+
+      - name: Login to AWS ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Build, tag and push docker images to AWS ECR
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: devopsquiz
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build --platform=linux/amd64 -t $REGISTRY/${{ matrix.services.ecr_repo }}:$IMAGE_TAG ${{ matrix.services.path }}
+          docker push $REGISTRY/${{ matrix.services.ecr_repo }}:$IMAGE_TAG
+
+# Write the migration job 
+# checkout code
+# configure oidc credentials
+# run the manually created migration task
+# Add wait time for the ECS migration task to finish
+  migration:
+    needs: build-docker-images
+    runs-on: ubuntu-latest
+    env:
+      ECS_CLUSTER: dev-april26bootcamp-devopsdojo
+      ECS_TASK_DEFINITION: dev-april26bootcamp-devopsdojo-backend
+      ECS_SECURITY_GROUP: sg-0b16780f9fc87e0c4
+      ECS_SUBNET: subnet-0f4d4040b5910bc83
+      CONTAINER_NAME: backend-app
+    steps:
+    # Step 1: Clone the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+       # Step 2: Authenticate to cloud provider via OIDC
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume:               # Add AWS IAM role ARN 
+          role-session-name: Github_to_AWS_via_FederatedOIDC
+
+      # Step 3: Run database migration via ECS task
+      - name: Run database migration via ECS task
+        run: |
+          TASK_ARN=$(aws ecs run-task --cluster ${{ env.ECS_CLUSTER }} \
+            --launch-type FARGATE \
+            --task-definition ${{ env.ECS_TASK_DEFINITION }} \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ env.ECS_SUBNET }}],securityGroups=[${{ env.ECS_SECURITY_GROUP }}],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"${{ env.CONTAINER_NAME }}","command":["/bin/sh","migrate.sh"]}]}' \
+            --query 'tasks[0].taskArn' --output text)
+
+          echo "Migration task started: $TASK_ARN"
+          aws ecs wait tasks-stopped --cluster ${{ env.ECS_CLUSTER }} --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          STOP_REASON=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} --tasks "$TASK_ARN" \
+            --query 'tasks[0].stoppedReason' --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Migration failed with exit code $EXIT_CODE (reason: $STOP_REASON)"
+            exit 1
+          fi  
+
+          echo "Migration completed successfully"
+
+# Step: Checkout code
+# Step: AWS OIDC credentials
+# Download task definition
+# Update image path in task definition
+  deploy-ecs-service:
+    needs: [build-docker-images, migration]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        services:
+          - name: backend
+            task_def:
+            ecs_service:
+            ecs_cluster:
+            ecr_repo:
+          - name: frontend
+            task_def:
+            ecs_service:
+            ecs_cluster:
+            ecr_repo:
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+    # Step 2: Authenticate to cloud provider via OIDC
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume:               # Add AWS IAM role ARN 
+          role-session-name: Github_to_AWS_via_FederatedOIDC
+        
+      - name: Download ${{ matrix.services.name }} task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ matrix.services.task_def }} \
+            --region ${{ env.AWS_REGION }} \
+            --query taskDefinition \
+            > task-definition.json
+
+      - name: Update ${{ matrix.services.name }} task definition
+        run: |
+          jq '.containerDefinitions[0].image = "${{ matrix.services.ecr_repo }}:${{ github.sha }}"' \
+            task-definition.json > task-definition-updated.json
+
+      - name: Deploy ${{ matrix.services.name }} to Amazon ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: task-definition-updated.json
+          service: ${{ matrix.services.ecs_service }}
+          cluster: ${{ matrix.services.ecs_cluster }}
+          wait-for-service-stability: false

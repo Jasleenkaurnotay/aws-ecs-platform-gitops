@@ -1,0 +1,84 @@
+name: infra with terraform
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:        # Name of the choice; Choice 1
+        description: 'Select the environment to deploy to'
+        required: true
+        type: choice
+        default: 'dev'
+        options:
+          - dev
+          - prod
+
+      terraform_operation:      # Choice 2
+        description: 'Select the terraform operation to perform'
+        required: true
+        type: choice
+        default: 'terraform init'
+        options:
+          - terraform init
+          - terraform plan
+          - terraform apply
+          - terraform destroy
+
+# REQUIRED: These permissions are mandatory for OIDC token fetching and checking out code
+permissions:
+  id-token: write   # Required for OIDC
+  contents: read    # Required for checkout
+
+jobs:
+  deploy_infra:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    # Set the working directory for all run steps in this job
+    defaults:
+      run:
+        working-directory: ./infra     # location where the below mentioned steps would run
+    steps:
+      # Step 1: Clone the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Install & configure the terraform CLU
+      - name: Install terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.15.3"
+      
+      # Step 3: Authenticate to cloud provider via OIDC
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}            # Add AWS IAM role ARN 
+          role-session-name: Github_to_AWS_via_FederatedOIDC
+      
+      # Step 4: Initialize terraform (runs automatically if any of the given oeprations are chosen)
+      - name: Initialize terraform
+        if: |
+          inputs.terraform_operation == 'terraform init' ||
+          inputs.terraform_operation == 'terraform plan' ||
+          inputs.terraform_operation == 'terraform apply' ||
+          inputs.terraform_operation == 'terraform destroy'
+        run: terraform init -backend-config=vars/${{ inputs.environment }}.tfbackend
+      
+      # Step 5: Run terraform plan
+      - name: Terraform plan
+        if: inputs.terraform_operation == 'terraform plan'
+        run: terraform plan -var-file=vars/${{ inputs.environment }}.tfvars
+
+      # Step 6: Run terraform apply
+      - name: Terraform apply
+        if: inputs.terraform_operation == 'terraform apply'
+        run: terraform apply -auto-approve -var-file=vars/${{ inputs.environment }}.tfvars
+
+      # Step 7: Run terraform destroy
+      - name: Terraform destroy
+        if: inputs.terraform_operation == 'terraform destroy'
+        run: terraform destroy -auto-approve -var-file=vars/"${{ inputs.environment }}.tfvars"
+
+
+
+
