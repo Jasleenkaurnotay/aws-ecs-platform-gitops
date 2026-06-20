@@ -1,23 +1,27 @@
-aws_region = "us-east-1"
-#aws_profile = "terraform"
+aws_region   = "us-east-1"
 project_name = "devops-quiz"
-vpc_name = "devops-quiz-vpc"
-vpc_cidr = "192.168.0.0/16"
-environment = "dev"
+vpc_name     = "devops-quiz-vpc"
+vpc_cidr     = "192.168.0.0/16"
+environment  = "dev"
+
 public_subnet_data = [
-    { cidr = "192.168.0.0/18", availability_zone = "us-east-1a", prefix = "pub"},
-    { cidr = "192.168.64.0/18", availability_zone = "us-east-1b", prefix = "pub"}
+  { cidr = "192.168.0.0/18",  availability_zone = "us-east-1a", prefix = "pub" },
+  { cidr = "192.168.64.0/18", availability_zone = "us-east-1b", prefix = "pub" }
 ]
+
 private_subnet_data = [
-    { cidr = "192.168.128.0/18", availability_zone = "us-east-1a", prefix = "pvt" },
-    { cidr = "192.168.192.0/18", availability_zone = "us-east-1b", prefix = "pvt" }
+  { cidr = "192.168.128.0/18", availability_zone = "us-east-1a", prefix = "pvt" },
+  { cidr = "192.168.192.0/18", availability_zone = "us-east-1b", prefix = "pvt" }
 ]
-need_nat_gateway = true
+
+need_nat_gateway        = true
 need_single_nat_gateway = true
-db_name = "devops_learning"
-db_username = "postgres"
-db_password = "changeme123"
+
+db_name          = "devops_learning"
+db_username      = "postgres"
+# db_password is passed via GitHub Secret — not stored here
 db_instance_size = "db.t3.medium"
+
 ecs_cluster_name       = "devops-quiz-dev"
 namespace_name         = "devops-quiz-namespace"
 ecs_task_iam_role_name = "devops-quiz-ecs-execution-role"
@@ -30,14 +34,14 @@ ecs_task_def = [
     memory          = 512
     launch_type     = "FARGATE"
     cont_def = {
-      name       = "frontend"
-      image      = "067270456427.dkr.ecr.us-east-1.amazonaws.com/devopsquiz/frontend:latest"
-      cpu        = 256
-      memory     = 512
-      essential  = true
-      cont_port  = 80
-      host_port  = 80
-      log_group  = "/ecs/frontend"
+      name      = "frontend"
+      image     = "067270456427.dkr.ecr.us-east-1.amazonaws.com/devopsquiz/frontend:latest"
+      cpu       = 256
+      memory    = 512
+      essential = true
+      cont_port = 80
+      host_port = 80
+      log_group = "/ecs/frontend"
       environment = [
         { name = "PORT",        value = "80" },
         { name = "BACKEND_URL", value = "http://backend.devops-quiz-namespace:8000" }
@@ -52,14 +56,14 @@ ecs_task_def = [
     memory          = 512
     launch_type     = "FARGATE"
     cont_def = {
-      name       = "backend"
-      image      = "067270456427.dkr.ecr.us-east-1.amazonaws.com/devopsquiz/backend:latest"
-      cpu        = 256
-      memory     = 512
-      essential  = true
-      cont_port  = 8000
-      host_port  = 8000
-      log_group  = "/ecs/backend"
+      name      = "backend"
+      image     = "067270456427.dkr.ecr.us-east-1.amazonaws.com/devopsquiz/backend:latest"
+      cpu       = 256
+      memory    = 512
+      essential = true
+      cont_port = 8000
+      host_port = 8000
+      log_group = "/ecs/backend"
       environment = [
         { name = "FLASK_DEBUG",               value = "1" },
         { name = "MAX_QUIZ_QUESTIONS",        value = "15" },
