@@ -8,6 +8,13 @@ resource "aws_iam_openid_connect_provider" "github_oidc_provider" {
 # Step 2: Create an IAM role for dev environment that github actions can assume via OIDC
 resource "aws_iam_role" "dev_oidc_iam_role" {
     name = "github-aws-dev-oidc-role"
+    # depends_on ensures OIDC roles are destroyed LAST — after all infra is gone
+    # Prevents role deletion mid-destroy while other resources still need credentials
+    depends_on = [
+      module.network,
+      module.ecs,
+      module.database
+    ]
 
     assume_role_policy = jsonencode({
         Version = "2012-10-17"
@@ -42,6 +49,13 @@ resource "aws_iam_role_policy_attachment" "dev_github_actions_admin" {
 # Step 4: Create an IAM role for prod environment that github actions can assume via OIDC
 resource "aws_iam_role" "prod_oidc_iam_role" {
     name = "github-aws-prod-oidc-role"
+    # depends_on ensures OIDC roles are destroyed LAST — after all infra is gone
+    # Prevents role deletion mid-destroy while other resources still need credentials
+    depends_on = [
+      module.network,
+      module.ecs,
+      module.database
+    ]
 
     assume_role_policy = jsonencode({
         Version = "2012-10-17"
